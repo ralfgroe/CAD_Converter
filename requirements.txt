@@ -1,4 +1,5 @@
 cascadio
+gmsh
 fastapi
 uvicorn[standard]
 python-multipart

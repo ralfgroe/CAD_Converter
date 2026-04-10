@@ -5,6 +5,7 @@ dependencies:
   - python>=3.9
   - pip:
     - cascadio
+    - gmsh
     - fastapi
     - uvicorn[standard]
     - python-multipart

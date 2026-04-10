@@ -17,6 +17,8 @@
       50% { border-color: #6366f1; }
     }
     .converting { animation: pulse-border 1.5s ease-in-out infinite; }
+    .engine-toggle input:checked + .toggle-track { background-color: #6366f1; }
+    .engine-toggle input:checked + .toggle-track .toggle-dot { transform: translateX(100%); }
   </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -41,6 +43,35 @@
 
     <!-- Upload Section -->
     <div id="upload-section">
+      <!-- Engine Selector -->
+      <div class="bg-white border border-gray-200 rounded-2xl p-4 mb-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-sm font-semibold text-gray-700">Tessellation Engine</p>
+            <p class="text-xs text-gray-400 mt-0.5">Choose which meshing algorithm to use</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <div class="flex bg-gray-100 rounded-lg p-0.5">
+              <button id="engine-btn-opencascade"
+                      class="engine-option px-3 py-1.5 text-sm font-medium rounded-md transition-all
+                             bg-white text-gray-900 shadow-sm"
+                      data-engine="opencascade">
+                OpenCASCADE
+              </button>
+              <button id="engine-btn-gmsh"
+                      class="engine-option px-3 py-1.5 text-sm font-medium rounded-md transition-all
+                             text-gray-500 hover:text-gray-700"
+                      data-engine="gmsh">
+                GMSH
+              </button>
+            </div>
+          </div>
+        </div>
+        <div id="engine-description" class="mt-3 text-xs text-gray-500 bg-gray-50 rounded-lg p-3">
+          <strong>OpenCASCADE</strong> — Parametric surface tessellator. Adapts triangle density to surface curvature: more detail on curves, fewer triangles on flat areas. Fast and accurate.
+        </div>
+      </div>
+
       <div id="drop-zone"
            class="border-2 border-dashed border-gray-300 rounded-2xl p-12 text-center
                   cursor-pointer transition-all duration-200 hover:border-indigo-400
@@ -73,6 +104,7 @@
           <div>
             <p class="text-lg font-semibold text-gray-700">Converting<span id="converting-dots">...</span></p>
             <p id="converting-filename" class="text-sm text-gray-500 mt-1"></p>
+            <p id="converting-engine" class="text-xs text-indigo-500 mt-1"></p>
           </div>
         </div>
       </div>
@@ -102,46 +134,74 @@
     <!-- Result Section -->
     <div id="result-section" class="hidden">
       <!-- Stats Bar -->
-      <div class="bg-white border border-gray-200 rounded-2xl p-4 mb-4 flex flex-wrap items-center gap-6">
-        <div class="flex items-center gap-2">
-          <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-          </svg>
-          <span class="font-semibold text-gray-800" id="result-filename"></span>
-        </div>
-        <div class="flex items-center gap-4 text-sm text-gray-500">
-          <span>Vertices: <strong id="stat-vertices" class="text-gray-800"></strong></span>
-          <span>Faces: <strong id="stat-faces" class="text-gray-800"></strong></span>
-          <span>Size: <strong id="stat-size" class="text-gray-800"></strong></span>
-        </div>
-        <div class="ml-auto flex items-center gap-2">
-          <button id="center-view-btn"
-                  class="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg
-                         hover:bg-gray-200 transition-colors flex items-center gap-2"
-                  title="Center camera on object">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="9" stroke-width="2"/>
-              <line x1="12" y1="3" x2="12" y2="7" stroke-width="2"/>
-              <line x1="12" y1="17" x2="12" y2="21" stroke-width="2"/>
-              <line x1="3" y1="12" x2="7" y2="12" stroke-width="2"/>
-              <line x1="17" y1="12" x2="21" y2="12" stroke-width="2"/>
+      <div class="bg-white border border-gray-200 rounded-2xl p-4 mb-4">
+        <div class="flex flex-wrap items-center gap-4">
+          <div class="flex items-center gap-2">
+            <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
             </svg>
-            Center View
-          </button>
-          <button id="download-btn"
-                  class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg
-                         hover:bg-indigo-700 transition-colors flex items-center gap-2">
+            <span class="font-semibold text-gray-800" id="result-filename"></span>
+          </div>
+          <span id="engine-badge"
+                class="px-2 py-0.5 text-xs font-medium rounded-full bg-indigo-100 text-indigo-700"></span>
+          <div class="flex items-center gap-4 text-sm text-gray-500">
+            <span>Vertices: <strong id="stat-vertices" class="text-gray-800"></strong></span>
+            <span>Faces: <strong id="stat-faces" class="text-gray-800"></strong></span>
+            <span>Size: <strong id="stat-size" class="text-gray-800"></strong></span>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-gray-100">
+          <button id="reconvert-btn"
+                  class="px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 text-sm font-medium rounded-lg
+                         hover:bg-amber-100 transition-colors flex items-center gap-1.5"
+                  title="Re-convert with the other engine">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-            Download OBJ
+            <span id="reconvert-label">Re-convert with GMSH</span>
           </button>
-          <button id="new-file-btn"
-                  class="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg
-                         hover:bg-gray-200 transition-colors">
-            New File
-          </button>
+          <div class="ml-auto flex items-center gap-2">
+            <button id="wireframe-btn"
+                    class="px-3 py-1.5 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg
+                           hover:bg-gray-200 transition-colors flex items-center gap-1.5"
+                    title="Toggle wireframe to inspect tessellation">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                      d="M4 12h16M12 4v16M4 4l16 16" />
+              </svg>
+              Wireframe
+            </button>
+            <button id="center-view-btn"
+                    class="px-3 py-1.5 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg
+                           hover:bg-gray-200 transition-colors flex items-center gap-1.5"
+                    title="Center camera on object">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="9" stroke-width="2"/>
+                <line x1="12" y1="3" x2="12" y2="7" stroke-width="2"/>
+                <line x1="12" y1="17" x2="12" y2="21" stroke-width="2"/>
+                <line x1="3" y1="12" x2="7" y2="12" stroke-width="2"/>
+                <line x1="17" y1="12" x2="21" y2="12" stroke-width="2"/>
+              </svg>
+              Center
+            </button>
+            <button id="download-btn"
+                    class="px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-lg
+                           hover:bg-indigo-700 transition-colors flex items-center gap-1.5">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Download OBJ
+            </button>
+            <button id="new-file-btn"
+                    class="px-3 py-1.5 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg
+                           hover:bg-gray-200 transition-colors">
+              New File
+            </button>
+          </div>
         </div>
       </div>
 
@@ -164,6 +224,7 @@
     const uploadSection = document.getElementById('upload-section');
     const convertingSection = document.getElementById('converting-section');
     const convertingFilename = document.getElementById('converting-filename');
+    const convertingEngine = document.getElementById('converting-engine');
     const errorSection = document.getElementById('error-section');
     const errorMessage = document.getElementById('error-message');
     const errorRetryBtn = document.getElementById('error-retry-btn');
@@ -171,13 +232,51 @@
     const downloadBtn = document.getElementById('download-btn');
     const newFileBtn = document.getElementById('new-file-btn');
     const centerViewBtn = document.getElementById('center-view-btn');
+    const wireframeBtn = document.getElementById('wireframe-btn');
+    const reconvertBtn = document.getElementById('reconvert-btn');
+    const reconvertLabel = document.getElementById('reconvert-label');
+    const engineBadge = document.getElementById('engine-badge');
     const resultFilename = document.getElementById('result-filename');
     const statVertices = document.getElementById('stat-vertices');
     const statFaces = document.getElementById('stat-faces');
     const statSize = document.getElementById('stat-size');
+    const engineDescription = document.getElementById('engine-description');
 
+    let selectedEngine = 'opencascade';
     let currentFileId = null;
+    let lastUploadedFile = null;
+    let lastObjFilename = null;
     let renderer, scene, camera, controls, loadedModel;
+    let wireframeOn = false;
+    let solidMaterials = [];
+    let wireOverlay = null;
+
+    const ENGINE_LABELS = {
+      opencascade: 'OpenCASCADE',
+      gmsh: 'GMSH',
+    };
+
+    const ENGINE_DESCRIPTIONS = {
+      opencascade: '<strong>OpenCASCADE</strong> — Parametric surface tessellator. Adapts triangle density to surface curvature: more detail on curves, fewer triangles on flat areas. Fast and accurate.',
+      gmsh: '<strong>GMSH</strong> — Delaunay-based mesh generator. Produces more uniform triangle sizes across the entire surface. Great for simulation and rendering quality.',
+    };
+
+    // --- Engine Selector ---
+
+    document.querySelectorAll('.engine-option').forEach(btn => {
+      btn.addEventListener('click', () => {
+        selectedEngine = btn.dataset.engine;
+        document.querySelectorAll('.engine-option').forEach(b => {
+          b.classList.remove('bg-white', 'text-gray-900', 'shadow-sm');
+          b.classList.add('text-gray-500');
+        });
+        btn.classList.add('bg-white', 'text-gray-900', 'shadow-sm');
+        btn.classList.remove('text-gray-500');
+        engineDescription.innerHTML = ENGINE_DESCRIPTIONS[selectedEngine];
+      });
+    });
+
+    // --- Camera framing ---
 
     function frameCameraOnObject() {
       if (!loadedModel || !camera || !controls) return;
@@ -226,6 +325,8 @@
       errorSection.classList.add('hidden');
       resultSection.classList.add('hidden');
       fileInput.value = '';
+      lastUploadedFile = null;
+      wireframeOn = false;
       disposeViewer();
     }
 
@@ -243,19 +344,25 @@
       return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     }
 
-    async function handleFile(file) {
+    async function handleFile(file, engineOverride) {
       const ext = file.name.split('.').pop().toLowerCase();
       if (ext !== 'step' && ext !== 'stp') {
         showError('Unsupported file type. Please upload a .step or .stp file.');
         return;
       }
 
+      lastUploadedFile = file;
+      const engine = engineOverride || selectedEngine;
+
       uploadSection.classList.add('hidden');
+      resultSection.classList.add('hidden');
       convertingSection.classList.remove('hidden');
       convertingFilename.textContent = file.name;
+      convertingEngine.textContent = `Using ${ENGINE_LABELS[engine]} engine`;
 
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('engine', engine);
 
       try {
         const resp = await fetch('/api/convert', { method: 'POST', body: formData });
@@ -267,14 +374,23 @@
         }
 
         currentFileId = data.file_id;
+        lastObjFilename = data.obj_filename;
+        wireframeOn = false;
 
         convertingSection.classList.add('hidden');
         resultSection.classList.remove('hidden');
 
         resultFilename.textContent = data.obj_filename;
+        engineBadge.textContent = ENGINE_LABELS[data.engine];
         statVertices.textContent = data.vertex_count.toLocaleString();
         statFaces.textContent = data.face_count.toLocaleString();
         statSize.textContent = formatBytes(data.file_size_bytes);
+
+        const otherEngine = data.engine === 'opencascade' ? 'gmsh' : 'opencascade';
+        reconvertLabel.textContent = `Re-convert with ${ENGINE_LABELS[otherEngine]}`;
+        reconvertBtn.dataset.engine = otherEngine;
+
+        updateWireframeButtonStyle();
 
         downloadBtn.onclick = async () => {
           const resp = await fetch(`/api/download/${currentFileId}`);
@@ -296,6 +412,75 @@
       }
     }
 
+    // --- Re-convert ---
+
+    reconvertBtn.addEventListener('click', () => {
+      if (!lastUploadedFile) return;
+      const otherEngine = reconvertBtn.dataset.engine;
+      handleFile(lastUploadedFile, otherEngine);
+    });
+
+    // --- Wireframe Toggle ---
+
+    function updateWireframeButtonStyle() {
+      if (wireframeOn) {
+        wireframeBtn.classList.remove('bg-gray-100', 'text-gray-700');
+        wireframeBtn.classList.add('bg-indigo-100', 'text-indigo-700');
+      } else {
+        wireframeBtn.classList.remove('bg-indigo-100', 'text-indigo-700');
+        wireframeBtn.classList.add('bg-gray-100', 'text-gray-700');
+      }
+    }
+
+    wireframeBtn.addEventListener('click', () => {
+      if (!loadedModel || !scene) return;
+      wireframeOn = !wireframeOn;
+      updateWireframeButtonStyle();
+
+      if (wireframeOn) {
+        loadedModel.traverse((child) => {
+          if (child.isMesh) {
+            child.material = new THREE.MeshStandardMaterial({
+              color: 0x6366f1,
+              metalness: 0.05,
+              roughness: 0.8,
+              transparent: true,
+              opacity: 0.35,
+            });
+          }
+        });
+        wireOverlay = new THREE.Group();
+        loadedModel.traverse((child) => {
+          if (child.isMesh) {
+            const wireGeo = new THREE.WireframeGeometry(child.geometry);
+            const wireMat = new THREE.LineBasicMaterial({ color: 0x312e81, linewidth: 1 });
+            const wireLines = new THREE.LineSegments(wireGeo, wireMat);
+            wireLines.position.copy(child.getWorldPosition(new THREE.Vector3()));
+            wireLines.rotation.copy(child.getWorldQuaternion(new THREE.Quaternion()).clone());
+            wireLines.quaternion.copy(child.getWorldQuaternion(new THREE.Quaternion()));
+            wireLines.scale.copy(child.getWorldScale(new THREE.Vector3()));
+            wireOverlay.add(wireLines);
+          }
+        });
+        scene.add(wireOverlay);
+      } else {
+        if (wireOverlay) {
+          scene.remove(wireOverlay);
+          wireOverlay = null;
+        }
+        loadedModel.traverse((child) => {
+          if (child.isMesh) {
+            child.material = new THREE.MeshStandardMaterial({
+              color: 0x6366f1,
+              metalness: 0.15,
+              roughness: 0.6,
+              flatShading: false,
+            });
+          }
+        });
+      }
+    });
+
     // --- Three.js 3D Viewer ---
 
     function disposeViewer() {
@@ -310,6 +495,7 @@
       scene = null;
       camera = null;
       loadedModel = null;
+      wireOverlay = null;
     }
 
     function loadPreview(fileId) {

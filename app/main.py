@@ -2,11 +2,11 @@ import os
 import uuid
 import logging
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.converter import convert_step_to_obj
+from app.converter import convert_step_to_obj, ENGINES
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -34,9 +34,18 @@ async def serve_frontend():
 
 
 @app.post("/api/convert")
-async def convert(file: UploadFile = File(...)):
+async def convert(
+    file: UploadFile = File(...),
+    engine: str = Form("opencascade"),
+):
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")
+
+    if engine not in ENGINES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown engine '{engine}'. Available: {list(ENGINES.keys())}",
+        )
 
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in (".step", ".stp"):
@@ -61,7 +70,7 @@ async def convert(file: UploadFile = File(...)):
     logger.info("Uploaded %s as %s (%d bytes)", file.filename, file_id, len(content))
 
     try:
-        result = convert_step_to_obj(step_path, obj_path)
+        result = convert_step_to_obj(step_path, obj_path, engine=engine)
     except (FileNotFoundError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except RuntimeError as exc:
@@ -77,6 +86,7 @@ async def convert(file: UploadFile = File(...)):
         "file_size_bytes": result.file_size_bytes,
         "vertex_count": result.vertex_count,
         "face_count": result.face_count,
+        "engine": result.engine,
     }
 
 
