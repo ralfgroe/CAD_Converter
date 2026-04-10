@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>STEP to OBJ Converter</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <style>
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+    #viewer-canvas { width: 100%; height: 100%; display: block; }
+    .drop-active { border-color: #6366f1 !important; background-color: #eef2ff !important; }
+    @keyframes pulse-border {
+      0%, 100% { border-color: #a5b4fc; }
+      50% { border-color: #6366f1; }
+    }
+    .converting { animation: pulse-border 1.5s ease-in-out infinite; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-gray-200 shadow-sm">
+    <div class="max-w-5xl mx-auto px-6 py-4 flex items-center gap-3">
+      <div class="w-10 h-10 rounded-lg bg-indigo-600 flex items-center justify-center">
+        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-xl font-bold text-gray-900">STEP to OBJ Converter</h1>
+        <p class="text-sm text-gray-500">Upload a CAD file and get a mesh</p>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-6 py-8">
+
+    <!-- Upload Section -->
+    <div id="upload-section">
+      <div id="drop-zone"
+           class="border-2 border-dashed border-gray-300 rounded-2xl p-12 text-center
+                  cursor-pointer transition-all duration-200 hover:border-indigo-400
+                  hover:bg-indigo-50/50 bg-white">
+        <div class="flex flex-col items-center gap-4">
+          <div class="w-16 h-16 rounded-full bg-indigo-100 flex items-center justify-center">
+            <svg class="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+          </div>
+          <div>
+            <p class="text-lg font-semibold text-gray-700">Drop your STEP file here</p>
+            <p class="text-sm text-gray-500 mt-1">or click to browse &mdash; accepts <span class="font-mono text-indigo-600">.step</span> and <span class="font-mono text-indigo-600">.stp</span> files up to 100 MB</p>
+          </div>
+        </div>
+        <input type="file" id="file-input" accept=".step,.stp" class="hidden" />
+      </div>
+    </div>
+
+    <!-- Converting Indicator -->
+    <div id="converting-section" class="hidden">
+      <div class="border-2 border-indigo-300 rounded-2xl p-12 text-center bg-white converting">
+        <div class="flex flex-col items-center gap-4">
+          <svg class="w-12 h-12 text-indigo-600 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <div>
+            <p class="text-lg font-semibold text-gray-700">Converting<span id="converting-dots">...</span></p>
+            <p id="converting-filename" class="text-sm text-gray-500 mt-1"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error Message -->
+    <div id="error-section" class="hidden">
+      <div class="bg-red-50 border border-red-200 rounded-2xl p-6">
+        <div class="flex items-start gap-3">
+          <svg class="w-6 h-6 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div>
+            <p class="font-semibold text-red-800">Conversion Failed</p>
+            <p id="error-message" class="text-sm text-red-700 mt-1"></p>
+          </div>
+        </div>
+        <button id="error-retry-btn"
+                class="mt-4 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg
+                       hover:bg-red-700 transition-colors">
+          Try Another File
+        </button>
+      </div>
+    </div>
+
+    <!-- Result Section -->
+    <div id="result-section" class="hidden">
+      <!-- Stats Bar -->
+      <div class="bg-white border border-gray-200 rounded-2xl p-4 mb-4 flex flex-wrap items-center gap-6">
+        <div class="flex items-center gap-2">
+          <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          </svg>
+          <span class="font-semibold text-gray-800" id="result-filename"></span>
+        </div>
+        <div class="flex items-center gap-4 text-sm text-gray-500">
+          <span>Vertices: <strong id="stat-vertices" class="text-gray-800"></strong></span>
+          <span>Faces: <strong id="stat-faces" class="text-gray-800"></strong></span>
+          <span>Size: <strong id="stat-size" class="text-gray-800"></strong></span>
+        </div>
+        <div class="ml-auto flex items-center gap-2">
+          <button id="center-view-btn"
+                  class="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg
+                         hover:bg-gray-200 transition-colors flex items-center gap-2"
+                  title="Center camera on object">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="9" stroke-width="2"/>
+              <line x1="12" y1="3" x2="12" y2="7" stroke-width="2"/>
+              <line x1="12" y1="17" x2="12" y2="21" stroke-width="2"/>
+              <line x1="3" y1="12" x2="7" y2="12" stroke-width="2"/>
+              <line x1="17" y1="12" x2="21" y2="12" stroke-width="2"/>
+            </svg>
+            Center View
+          </button>
+          <button id="download-btn"
+                  class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg
+                         hover:bg-indigo-700 transition-colors flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Download OBJ
+          </button>
+          <button id="new-file-btn"
+                  class="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg
+                         hover:bg-gray-200 transition-colors">
+            New File
+          </button>
+        </div>
+      </div>
+
+      <!-- 3D Viewer -->
+      <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden" style="height: 520px;">
+        <div id="viewer-container" class="w-full h-full relative">
+          <canvas id="viewer-canvas"></canvas>
+          <div class="absolute bottom-3 left-3 bg-black/60 text-white text-xs px-3 py-1.5 rounded-lg backdrop-blur">
+            Drag to rotate &middot; Scroll to zoom &middot; Right-drag to pan
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+    const uploadSection = document.getElementById('upload-section');
+    const convertingSection = document.getElementById('converting-section');
+    const convertingFilename = document.getElementById('converting-filename');
+    const errorSection = document.getElementById('error-section');
+    const errorMessage = document.getElementById('error-message');
+    const errorRetryBtn = document.getElementById('error-retry-btn');
+    const resultSection = document.getElementById('result-section');
+    const downloadBtn = document.getElementById('download-btn');
+    const newFileBtn = document.getElementById('new-file-btn');
+    const centerViewBtn = document.getElementById('center-view-btn');
+    const resultFilename = document.getElementById('result-filename');
+    const statVertices = document.getElementById('stat-vertices');
+    const statFaces = document.getElementById('stat-faces');
+    const statSize = document.getElementById('stat-size');
+
+    let currentFileId = null;
+    let renderer, scene, camera, controls, loadedModel;
+
+    function frameCameraOnObject() {
+      if (!loadedModel || !camera || !controls) return;
+      const box = new THREE.Box3().setFromObject(loadedModel);
+      const center = box.getCenter(new THREE.Vector3());
+      const sphere = box.getBoundingSphere(new THREE.Sphere());
+      const fov = camera.fov * (Math.PI / 180);
+      const dist = sphere.radius / Math.sin(fov / 2) * 1.2;
+      const direction = new THREE.Vector3(1, 0.7, 1).normalize();
+      camera.position.copy(center).addScaledVector(direction, dist);
+      controls.target.copy(center);
+      controls.update();
+    }
+
+    // --- File Upload Handling ---
+
+    dropZone.addEventListener('click', () => fileInput.click());
+
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('drop-active');
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('drop-active');
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('drop-active');
+      const files = e.dataTransfer.files;
+      if (files.length > 0) handleFile(files[0]);
+    });
+
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files.length > 0) handleFile(fileInput.files[0]);
+    });
+
+    errorRetryBtn.addEventListener('click', resetToUpload);
+    newFileBtn.addEventListener('click', resetToUpload);
+    centerViewBtn.addEventListener('click', frameCameraOnObject);
+
+    function resetToUpload() {
+      uploadSection.classList.remove('hidden');
+      convertingSection.classList.add('hidden');
+      errorSection.classList.add('hidden');
+      resultSection.classList.add('hidden');
+      fileInput.value = '';
+      disposeViewer();
+    }
+
+    function showError(msg) {
+      uploadSection.classList.add('hidden');
+      convertingSection.classList.add('hidden');
+      errorSection.classList.remove('hidden');
+      resultSection.classList.add('hidden');
+      errorMessage.textContent = msg;
+    }
+
+    function formatBytes(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    async function handleFile(file) {
+      const ext = file.name.split('.').pop().toLowerCase();
+      if (ext !== 'step' && ext !== 'stp') {
+        showError('Unsupported file type. Please upload a .step or .stp file.');
+        return;
+      }
+
+      uploadSection.classList.add('hidden');
+      convertingSection.classList.remove('hidden');
+      convertingFilename.textContent = file.name;
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        const resp = await fetch('/api/convert', { method: 'POST', body: formData });
+        const data = await resp.json();
+
+        if (!resp.ok) {
+          showError(data.detail || 'Conversion failed.');
+          return;
+        }
+
+        currentFileId = data.file_id;
+
+        convertingSection.classList.add('hidden');
+        resultSection.classList.remove('hidden');
+
+        resultFilename.textContent = data.obj_filename;
+        statVertices.textContent = data.vertex_count.toLocaleString();
+        statFaces.textContent = data.face_count.toLocaleString();
+        statSize.textContent = formatBytes(data.file_size_bytes);
+
+        downloadBtn.onclick = async () => {
+          const resp = await fetch(`/api/download/${currentFileId}`);
+          const blob = await resp.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = data.obj_filename;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        };
+
+        loadPreview(currentFileId);
+
+      } catch (err) {
+        showError('Network error: ' + err.message);
+      }
+    }
+
+    // --- Three.js 3D Viewer ---
+
+    function disposeViewer() {
+      if (renderer) {
+        renderer.dispose();
+        renderer = null;
+      }
+      if (controls) {
+        controls.dispose();
+        controls = null;
+      }
+      scene = null;
+      camera = null;
+      loadedModel = null;
+    }
+
+    function loadPreview(fileId) {
+      disposeViewer();
+
+      const container = document.getElementById('viewer-container');
+      const canvas = document.getElementById('viewer-canvas');
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0xf8fafc);
+
+      camera = new THREE.PerspectiveCamera(45, width / height, 0.001, 100000);
+      camera.position.set(0, 0, 5);
+
+      renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+      renderer.setSize(width, height);
+      renderer.setPixelRatio(window.devicePixelRatio);
+
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.08;
+
+      // Lighting
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+      scene.add(ambientLight);
+
+      const dirLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
+      dirLight1.position.set(5, 10, 7);
+      scene.add(dirLight1);
+
+      const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.3);
+      dirLight2.position.set(-5, -3, -5);
+      scene.add(dirLight2);
+
+      // Grid
+      const grid = new THREE.GridHelper(20, 40, 0xd1d5db, 0xe5e7eb);
+      grid.material.transparent = true;
+      grid.material.opacity = 0.5;
+      scene.add(grid);
+
+      // Load OBJ
+      const loader = new THREE.OBJLoader();
+      loader.load(`/api/preview/${fileId}`, (obj) => {
+        const material = new THREE.MeshStandardMaterial({
+          color: 0x6366f1,
+          metalness: 0.15,
+          roughness: 0.6,
+          flatShading: false,
+        });
+
+        obj.traverse((child) => {
+          if (child.isMesh) {
+            child.material = material;
+            child.geometry.computeVertexNormals();
+          }
+        });
+
+        scene.add(obj);
+        loadedModel = obj;
+        frameCameraOnObject();
+      });
+
+      function animate() {
+        if (!renderer) return;
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+      }
+      animate();
+
+      window.addEventListener('resize', onResize);
+    }
+
+    function onResize() {
+      if (!renderer || !camera) return;
+      const container = document.getElementById('viewer-container');
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    }
+  </script>
+</body>
+</html>
